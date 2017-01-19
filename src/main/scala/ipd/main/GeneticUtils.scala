@@ -1,127 +1,76 @@
 package ipd.main
 
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+
 object GeneticUtils {
 
-  def init(iterationNumber: Int, chromosomeNumber: Int, crossProbability: Double, mutationProbability: Double,
+  def init(iterationNumber: Int, populationSize: Int, crossProbability: Double, mutationProbability: Double,
            reproductionProbability: Double): Unit = {
-    var i = 1
-
-    println("Pokolenie 1")
-    var generation = initFirstGeneration(chromosomeNumber)
-//    generation.foreach(println)
-//    println
-
-    var maxPoint = globalMaximum(generation)
-    println("Najlepszy chromoson: " + maxPoint)
-    println
-
-    while(i < iterationNumber) {
-      println("Pokolenie " + (i+1))
-      generation = createNewGeneration(generation, crossProbability, mutationProbability, reproductionProbability)
-
-//      generation.foreach(println)
-//      println
-
-      maxPoint = globalMaximum(generation)
-      println("Najlepszy chromoson: " + maxPoint)
-      println
-
-      i += 1
+    Stream.iterate(initFirstGeneration(populationSize), iterationNumber) { prevGen =>
+      createNewGeneration(prevGen, crossProbability, mutationProbability, reproductionProbability)
+    }.zipWithIndex.foreach { case (generation, index) =>
+      val maxPoint = getMaximumChromosome(generation)
+      println(s"Pokolenie ${index + 1}")
+      println(s"Najlepszy chromoson: $maxPoint\n")
     }
   }
 
-  private def initFirstGeneration(number: Int): List[Chromosome] = {
-    var generation = List[Chromosome]()
-
-    for (i <- 1 to number) {
+  private def initFirstGeneration(populationSize: Int): List[Chromosome] = {
+    List.fill(populationSize) {
       val binaryValue = BinaryUtils.randomCodedBinary()
       val decimalValue = BinaryUtils.toDecimal(binaryValue)
       val functionValue = Settings.function(decimalValue)
-      val chromosome = Chromosome(decimalValue, functionValue, binaryValue)
-      generation = generation :+ chromosome
+      Chromosome(decimalValue, functionValue, binaryValue)
     }
-
-    generation
   }
 
-  private def globalMaximum(generation: List[Chromosome]): Chromosome = {
-    generation.find(e => e.functionValue == generation.map(e => e.functionValue).max).get
+  private def getMaximumChromosome(generation: List[Chromosome]): Chromosome = {
+    generation.max(Ordering[Double].on[Chromosome](_.functionValue))
   }
+
 
   private def createNewGeneration(generation: List[Chromosome], crossProbability: Double, mutationProbability: Double,
                                   reproductionProbability: Double): List[Chromosome] = {
     val reproductionChromosomes = getChromosomesToReproduction(generation, RandomUtils.randomNumbers(0, 100, generation.size))
-    var newGeneration = List[Chromosome]()
-    var i = 0
-
-   //print("Operacje genetyczne: ")
-
-    while(newGeneration.size < generation.size) {
-      val geneticOperation = RandomUtils.randomNumber(0, 100)
-
+    var newGeneration = ArrayBuffer[Chromosome]()
+    println(reproductionChromosomes.size)
+    while (newGeneration.size < generation.size) {
+      val i = newGeneration.size
+      val geneticOperation = RandomUtils.randomNumber(0, crossProbability+mutationProbability+reproductionProbability)
       if (geneticOperation <= crossProbability && i < generation.size - 2) {
-        //print("krzyzowanie, ")
-        newGeneration = newGeneration ++ GeneticUtils.createChromosomes(reproductionChromosomes(i),
-          reproductionChromosomes(i+1))
-        i += 2
-      } else if (geneticOperation > crossProbability && geneticOperation <= crossProbability + mutationProbability) {
-        //print("mutacja, ")
-        newGeneration = newGeneration :+ GeneticUtils.mutateChromosome(reproductionChromosomes(i))
-        i += 1
-      } else if (geneticOperation > crossProbability + mutationProbability
-          && geneticOperation <= crossProbability + mutationProbability + reproductionProbability) {
-       //print("kopiowanie, ")
-        newGeneration = newGeneration :+ GeneticUtils.copyChromosome(reproductionChromosomes(i))
-        i += 1
+        newGeneration ++= createChromosomes(reproductionChromosomes(i), reproductionChromosomes(i + 1))
+      } else if (geneticOperation <= crossProbability + mutationProbability) {
+        newGeneration += mutateChromosome(reproductionChromosomes(i))
+      } else {
+        newGeneration += reproductionChromosomes(i)
       }
     }
-
-    println
-
-    newGeneration
+    newGeneration.toList
   }
 
   private def getChromosomesToReproduction(generation: List[Chromosome], numbers: List[Double]): List[Chromosome] = {
     val rouletteFields = RouletteUtils.getRouletteFields(generation)
-    var bestChromosomes = List[Chromosome]()
-
-    for (i <- numbers.indices) {
-      for (j <- rouletteFields.indices) {
-        if (numbers(i) >= rouletteFields(j).valueFrom && numbers(i) <= rouletteFields(j).valueTo) {
-          bestChromosomes = bestChromosomes :+ rouletteFields(j).chromosome
-        }
-      }
-    }
-
-    bestChromosomes
-  }
-
-  private def copyChromosome(chromosome: Chromosome): Chromosome = {
-    Chromosome(chromosome.decimalValue, chromosome.functionValue, chromosome.binaryValue)
+    println(rouletteFields.size)
+    for {
+      number <- numbers
+      field <- rouletteFields if(number >= field.valueFrom && number <= field.valueTo)
+    } yield field.chromosome
   }
 
   private def mutateChromosome(chromosome: Chromosome): Chromosome = {
-    var binaryValue = chromosome.binaryValue
+    val binaryValue = chromosome.binaryValue
     val charIndex = RandomUtils.randomIntNumber(binaryValue.length)
-    var binaryChar = binaryValue(charIndex)
+    val binaryChar = if (binaryValue(charIndex) == '0') '1' else '0'
 
-    if (binaryChar.equals('1')) {
-      binaryChar = '0'
-    } else {
-      binaryChar = '1'
-    }
-
-    binaryValue = binaryValue.substring(0,charIndex) + binaryChar + binaryValue.substring(charIndex + 1)
-
-    val decimalValue = BinaryUtils.toDecimal(binaryValue)
-    val functionValue = Settings.function(decimalValue)
-
-    Chromosome(decimalValue, functionValue, binaryValue)
+    val newBinaryValue = binaryValue.substring(0, charIndex) + binaryChar + binaryValue.substring(charIndex + 1)
+    val newDecimalValue = BinaryUtils.toDecimal(binaryValue)
+    val newFunctionValue = Settings.function(newDecimalValue)
+    Chromosome(newDecimalValue, newFunctionValue, newBinaryValue)
   }
 
   private def createChromosomes(parent1: Chromosome, parent2: Chromosome): List[Chromosome] = {
     val bitsNumber = parent1.binaryValue.length
-    val crossPoint = RandomUtils.randomNumber(0, bitsNumber-2).toInt
+    val crossPoint = RandomUtils.randomNumber(0, bitsNumber - 2).toInt
 
     val binaryValue1 = parent1.binaryValue.substring(0, crossPoint) + parent2.binaryValue.substring(crossPoint,
       bitsNumber)
@@ -134,7 +83,7 @@ object GeneticUtils {
     val functionValue2 = Settings.function(decimalValue2)
 
     List[Chromosome](Chromosome(decimalValue1, functionValue1, binaryValue1),
-    Chromosome(decimalValue2, functionValue2, binaryValue2))
+      Chromosome(decimalValue2, functionValue2, binaryValue2))
   }
 
 }

@@ -10,25 +10,14 @@ object BinaryUtils {
   }
 
   def randomCodedBinary(): String = {
-    var randomCodedBinary = ""
-
-    for(i <- 0 until BinaryUtils.BITS_NUMBER) {
-      randomCodedBinary = randomCodedBinary + RandomUtils.randomIntNumber(2)
-    }
-
-    randomCodedBinary
+    List.fill(BinaryUtils.BITS_NUMBER)(RandomUtils.randomIntNumber(2)).mkString("")
   }
 
   private def toDecimalN(binary: String): Int = Integer.parseInt(binary, 2)
 
   private def bitsNumber(): Int = {
-    val a = (Settings.MAX_FUNCTION_DOMAIN - Settings.MIN_FUNCTION_DOMAIN) * Math.pow(10, Settings.DECIMAL_PLACES) + 1
-    var bitsNumber = 1
-    while(Math.pow(2, bitsNumber) < a) {
-      bitsNumber += 1
-    }
-
-    bitsNumber
+    val possibilities = (Settings.MAX_FUNCTION_DOMAIN - Settings.MIN_FUNCTION_DOMAIN) * Math.pow(10, Settings.DECIMAL_PLACES) + 1
+    Stream.from(1).takeWhile(bits => Math.pow(2, bits) <= possibilities).last
   }
 
 }
